@@ -101,6 +101,13 @@ tr.detail p { margin: 0 0 6px; max-width: 90ch; overflow-wrap: anywhere; }
 .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
 footer { color: var(--muted); font-size: 0.82rem; max-width: 90ch; display: flex; flex-direction: column; gap: 4px; }
 footer p { margin: 0; }
+.origin { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.origin button { font: inherit; font-size: 0.85rem; display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.origin button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.origin[hidden] { display: none; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.dot.cn { background: var(--zh); } .dot.eu { background: var(--french); }
+.legend { margin: 6px 0 0; font-size: 0.82rem; color: var(--muted); max-width: 70ch; }
 .zhtr { color: var(--zh); font-size: 0.82rem; }
 .contact { border-left: 3px solid var(--accent); padding-left: 10px; }
 .contact b { color: var(--ink); }
@@ -125,6 +132,12 @@ footer p { margin: 0; }
           <button type="button" id="scope-nat" aria-pressed="true" title="Natif demandé dans l'annonce, ou poste en Europe (un Français y est éligible d'office)">Ouvert à un Français natif</button>
           <button type="button" id="scope-fr" aria-pressed="false">Liées au français</button>
         </div>
+        <div class="origin" id="origin" role="group" aria-label="Origine de l'ouverture aux Français">
+          <button type="button" data-o="" aria-pressed="true">Tous</button>
+          <button type="button" data-o="cn" aria-pressed="false"><span class="dot cn"></span><span id="o-cn"></span> Chine : natif demandé</button>
+          <button type="button" data-o="eu" aria-pressed="false"><span class="dot eu"></span><span id="o-eu"></span> Europe : nationalité implicite</button>
+        </div>
+        <p class="legend" id="legend"></p>
       </div>
       <div class="field">
         <span>Lieu de travail</span>
@@ -223,7 +236,7 @@ const SRC_HOW = { "BOSS Zhipin": "BOSS n'affiche ni mail ni téléphone : ouvre 
 const contactOf = r => { const t = (r[18] || ""), em = [...new Set(t.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || [])], ph = [...new Set(t.match(/(?<!\d)1[3-9]\d{9}(?!\d)/g) || [])], wx = /微信|wechat/i.test(t);
   return { em, ph, wx, how: SRC_HOW[S[r[16]]] || "" }; };
 
-const state = { scope: "nat", target: 0, q: "", fam: "", city: "", mode: "", zh: "", src: "", sort: "hi", full: false, nosal: false, shown: 100 };
+const state = { scope: "nat", target: 0, q: "", fam: "", city: "", mode: "", zh: "", src: "", sort: "hi", full: false, nosal: false, origin: "", shown: 100 };
 try { Object.assign(state, JSON.parse(localStorage.getItem("offres-natif") || "{}"), { shown: 100 }); } catch (e) {}
 if (state.scope !== "fr") state.scope = "nat";
 
@@ -232,6 +245,8 @@ const TOP_CITIES = (() => { const c = {}; R.forEach(r => r[3].split(",").forEach
 
 function match(r, skip) {
   if (state.scope === "nat" && !(r[11] || r[21])) return false;
+  if (state.scope === "nat" && state.origin === "cn" && !r[11]) return false;
+  if (state.scope === "nat" && state.origin === "eu" && !r[21]) return false;
   if (state.scope === "fr" && !(r[19] || r[21])) return false;
   if (skip !== "fam" && state.fam !== "" && r[1] !== +state.fam) return false;
   if (state.target > 0) { const monthly = r[7] === 1 && hi(r) > 0; if (monthly ? hi(r) < state.target : !state.nosal) return false; }
@@ -275,7 +290,7 @@ function render() {
   $("list-title").textContent = rows.length > 1 ? fmt(rows.length) + " offres" : rows.length + " offre";
   $("rows").innerHTML = rows.slice(0, state.shown).map(r => {
     const sal = r[7] ? `${fmt(r[5]) || "…"} – ${fmt(r[6]) || "…"}<small>${UNIT[r[7]]}${r[8] > 12 ? " × " + r[8] + " mois" : ""}${r[10] ? ", temps partiel" : ""}</small>` : `<small>non affiché</small>`;
-    const g = zhGroup(r), tags = [r[19] ? `<span class="chip fr">Français</span>` : "", r[21] ? `<span class="chip fr">Europe : nationalité implicite</span>` : "", r[11] === 1 ? `<span class="chip fr">Nationalité française demandée</span>` : r[11] === 2 ? `<span class="chip fr">Français natif demandé</span>` : ""].join("");
+    const g = zhGroup(r), tags = [r[19] ? `<span class="chip fr">Français</span>` : "", r[21] ? `<span class="chip fr">Europe · nationalité implicite</span>` : "", r[11] === 1 ? `<span class="chip fr">Nationalité française demandée</span>` : r[11] === 2 ? `<span class="chip fr">Français natif demandé</span>` : ""].join("");
     const idx = R.indexOf(r);
     return `<tr><td><button type="button" class="title" data-i="${idx}" aria-expanded="false">${esc(r[0])}</button>${zhTr(r[0]) ? `<div class="zhtr">≈ ${esc(zhTr(r[0]))}</div>` : ""}<div class="co">${esc(r[2])}${zhTr(r[2]) ? " (≈ " + esc(zhTr(r[2])) + ")" : ""} · ${esc(F[r[1]])}</div>${tags ? `<div class="tags">${tags}</div>` : ""}</td>
       <td>${esc(r[3] || "Non précisé")}${r[4] !== "Chine" && r[4] !== "Non précisé" ? `<div class="co">${esc(r[4])}</div>` : ""}</td>
@@ -297,6 +312,11 @@ function fillSelects() {
   $("src").innerHTML = `<option value="">Toutes</option>` + S.map((s, i) => `<option value="${i}">${esc(s)}</option>`).join("");
 }
 function syncControls() {
+  const nat = state.scope === "nat", cn = R.filter(r => r[11]).length, eu = R.filter(r => r[21]).length;
+  $("origin").hidden = !nat; if (!["", "cn", "eu"].includes(state.origin) || !nat) state.origin = "";
+  document.querySelectorAll("#origin button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.o === state.origin)));
+  $("o-cn").textContent = cn; $("o-eu").textContent = eu;
+  $("legend").textContent = nat ? "Chine : l'annonce demande un Français natif ou la nationalité française. Europe : le poste est en Europe, un Français y est éligible sans que l'annonce le précise." : "Toutes les offres où le français est une compétence, y compris les postes en Europe.";
   if (!["", "0", "1", "2"].includes(String(state.mode))) state.mode = "";
   ["nat", "fr"].forEach(k => $("scope-" + k).setAttribute("aria-pressed", state.scope === k));
   [["all", ""], ["1", "1"], ["0", "0"], ["2", "2"]].forEach(([id, v]) => $("mode-" + id).setAttribute("aria-pressed", String(state.mode) === v));
@@ -312,7 +332,8 @@ $("target").oninput = e => update({ target: +e.target.value });
 $("q").oninput = e => update({ q: e.target.value.trim() });
 ["fam", "city", "zh", "src", "sort"].forEach(k => $(k).onchange = e => update({ [k]: e.target.value }));
 ["full", "nosal"].forEach(k => $(k).onchange = e => update({ [k]: e.target.checked }));
-$("reset").onclick = () => { Object.assign(state, { target: 0, q: "", fam: "", city: "", mode: "", zh: "", src: "", sort: "hi", full: false, nosal: false }); syncControls(); update({}); };
+$("origin").onclick = e => { const b = e.target.closest("button"); if (!b) return; state.origin = b.dataset.o; syncControls(); update({}); };
+$("reset").onclick = () => { Object.assign(state, { origin: "", target: 0, q: "", fam: "", city: "", mode: "", zh: "", src: "", sort: "hi", full: false, nosal: false }); syncControls(); update({}); };
 $("more").onclick = () => { state.shown += 100; render(); };
 $("bars").onclick = e => { const b = e.target.closest(".bar"); if (!b) return; const k = b.dataset.fam; state.fam = String(state.fam) === k ? "" : k; syncControls(); update({}); };
 $("rows").onclick = e => {
